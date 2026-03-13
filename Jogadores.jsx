@@ -182,31 +182,61 @@ export default function Jogadores() {
           ? <div className="loading">Carregando...</div>
           : players.length === 0
             ? <div className="empty">Nenhum jogador cadastrado</div>
-            : <div className="list">
-              {players.map(p => (
-                <div className="list-item" key={p.id}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600 }}>{p.nome} <span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 'normal', marginLeft: 4 }}>{p.telefone || ''}</span></div>
-                    <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
-                      <span className={`badge ${p.tipo === 'mensalista' ? 'blue' : 'amber'}`}>{p.tipo || 'mensalista'}</span>
-                      {p.posicao && <span className="badge receita">{p.posicao}</span>}
-                      <span style={{ color: '#f5a623', fontSize: 14, letterSpacing: -1 }}>
-                        {'★'.repeat(p.rating)}
-                      </span>
-                    </div>
+            : <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                {/* Mensalistas */}
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--blue)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }}></div>
+                    MENSALISTAS ({players.filter(p => p.tipo === 'mensalista').length})
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="btn btn-sm btn-secondary" onClick={() => editPlayer(p)}>
-                      Editar
-                    </button>
-                    <button className="btn btn-sm btn-danger" onClick={() => removePlayer(p.id)} title="Excluir">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                    </button>
+                  <div className="list">
+                    {players.filter(p => p.tipo === 'mensalista').map(p => (
+                      <PlayerItem key={p.id} p={p} onEdit={editPlayer} onRemove={removePlayer} />
+                    ))}
+                    {players.filter(p => p.tipo === 'mensalista').length === 0 && <div className="empty" style={{ padding: 12 }}>Nenhum mensalista</div>}
                   </div>
                 </div>
-              ))}
-            </div>
+
+                {/* Diaristas */}
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'currentColor' }}></div>
+                    DIARISTAS ({players.filter(p => p.tipo === 'diarista' || !p.tipo).length})
+                  </div>
+                  <div className="list">
+                    {players.filter(p => p.tipo === 'diarista' || !p.tipo).map(p => (
+                      <PlayerItem key={p.id} p={p} onEdit={editPlayer} onRemove={removePlayer} />
+                    ))}
+                    {players.filter(p => p.tipo === 'diarista' || !p.tipo).length === 0 && <div className="empty" style={{ padding: 12 }}>Nenhum diarista</div>}
+                  </div>
+                </div>
+              </div>
         }
+      </div>
+    </div>
+  )
+}
+
+// Componente auxiliar para o item da lista
+function PlayerItem({ p, onEdit, onRemove }) {
+  return (
+    <div className="list-item">
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600 }}>{p.nome} <span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 'normal', marginLeft: 4 }}>{p.telefone || ''}</span></div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 4, alignItems: 'center' }}>
+          {p.posicao && <span className="badge receita" style={{ fontSize: 10 }}>{p.posicao}</span>}
+          <span style={{ color: '#f5a623', fontSize: 14, letterSpacing: -1 }}>
+            {'★'.repeat(p.rating)}
+          </span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn btn-sm btn-secondary" onClick={() => onEdit(p)}>
+          Editar
+        </button>
+        <button className="btn btn-sm btn-danger" onClick={() => onRemove(p.id)} title="Excluir">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+        </button>
       </div>
     </div>
   )

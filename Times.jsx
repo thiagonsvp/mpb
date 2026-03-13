@@ -144,12 +144,33 @@ export default function Times() {
         teams[bi].rating += p.rating
       })
     } else {
-      // Aleatório: round-robin respeitando capacidades
-      let ti = 0
-      pool.forEach(p => {
-        while (teams[ti].players.length >= teamCaps[ti]) ti++
-        teams[ti].players.push(p)
-        teams[ti].rating += p.rating
+      // Modo Prioridade: Distribui mensalistas primeiro (equilibrado entre times)
+      // e depois preenche com diaristas (também equilibrado)
+      const mensalistas = pool.filter(p => p.tipo === 'mensalista').sort((a, b) => b.rating - a.rating)
+      const diaristas = pool.filter(p => p.tipo !== 'mensalista').sort((a, b) => b.rating - a.rating)
+
+      // 1. Distribui mensalistas
+      mensalistas.forEach(p => {
+        let bi = 0, br = Infinity
+        teams.forEach((t, i) => {
+          if (t.players.length < teamCaps[i] && t.rating < br) {
+            br = t.rating; bi = i
+          }
+        })
+        teams[bi].players.push(p)
+        teams[bi].rating += p.rating
+      })
+
+      // 2. Distribui diaristas
+      diaristas.forEach(p => {
+        let bi = 0, br = Infinity
+        teams.forEach((t, i) => {
+          if (t.players.length < teamCaps[i] && t.rating < br) {
+            br = t.rating; bi = i
+          }
+        })
+        teams[bi].players.push(p)
+        teams[bi].rating += p.rating
       })
     }
     setReserves([])
@@ -221,8 +242,8 @@ export default function Times() {
           <div className="form-group" style={{ flex: 2, minWidth: 140 }}>
             <div className="form-label">Modo</div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className={`btn ${modo === 'equilibrado' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: 0 }} onClick={() => setModo('equilibrado')}>Equilibrado</button>
-              <button className={`btn ${modo === 'aleatorio' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: 0 }} onClick={() => setModo('aleatorio')}>Aleatório</button>
+              <button className={`btn ${modo === 'equilibrado' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: 0 }} onClick={() => setModo('equilibrado')}>Geral Equilibrado</button>
+              <button className={`btn ${modo === 'prioridade' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: 0 }} onClick={() => setModo('prioridade')}>Priorizar Mensalistas</button>
             </div>
           </div>
         </div>
