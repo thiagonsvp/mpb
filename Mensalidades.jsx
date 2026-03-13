@@ -11,10 +11,19 @@ function mesLabel(mes) {
   return MESES.find(m => m[0] === mes)?.[1] || mes
 }
 
-function getStatus(mes) {
-  const [y, m] = mes.split('-').map(Number)
-  const venc = new Date(y, m - 1, 10)
-  return new Date() > venc ? 'atrasado' : 'pendente'
+// getStatus: mensalista vence dia 07 do mês, diarista vence no dia gerado (hoje)
+function getStatus(mes, tipo) {
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  let venc
+  if (tipo === 'mensalista') {
+    const [y, m] = mes.split('-').map(Number)
+    venc = new Date(y, m - 1, 7) // dia 07 do mês
+  } else {
+    // diarista: vence hoje (no dia da geração) — ou seja, nunca está atrasado ao gerar
+    venc = new Date(hoje)
+  }
+  return hoje > venc ? 'atrasado' : 'pendente'
 }
 
 export default function Mensalidades() {
@@ -33,7 +42,7 @@ export default function Mensalidades() {
     setLoading(true)
     const { data, error } = await supabase
       .from('mensalidades')
-      .select('*, jogadores(nome, telefone)')
+      .select('*, jogadores(nome, telefone, tipo)')
       .order('mes', { ascending: false })
     if (error) setError('Erro ao carregar: ' + error.message)
     else setMensalidades(data || [])
@@ -53,7 +62,7 @@ export default function Mensalidades() {
 
     if (!jogadores?.length) { setError('Nenhum jogador ativo.'); setGenerating(false); return }
 
-    const status = getStatus(mes)
+
     const presencesStr = localStorage.getItem('mpb-last-presences')
     const presences = presencesStr ? JSON.parse(presencesStr) : []
 
@@ -67,7 +76,7 @@ export default function Mensalidades() {
       jogador_id: j.id,
       mes,
       valor: j.tipo === 'mensalista' ? vM : vD,
-      status,
+      status: getStatus(mes, j.tipo),
     }))
 
     // upsert — ignora duplicatas (unique constraint jogador_id+mes)
@@ -80,7 +89,7 @@ export default function Mensalidades() {
     loadMensalidades()
   }
 
-  async function marcarPago(id, valorMen, nomejogador, mesMen) {
+  async function marcarPago(id, valorMen, nomejogador, mesMen, tipoJogador) {
     const hoje = new Date().toISOString().split('T')[0]
     const { error } = await supabase
       .from('mensalidades')
@@ -89,12 +98,16 @@ export default function Mensalidades() {
 
     if (error) { setError('Erro: ' + error.message); return }
 
-    // lança receita automaticamente
+    const isDiarista = tipoJogador === 'diarista'
+
+    // lança receita automaticamente com categoria correta
     await supabase.from('transacoes').insert({
-      descricao: `Mensalidade ${nomejogador} (${mesLabel(mesMen)})`,
+      descricao: isDiarista
+        ? `Diária ${nomejogador} (${mesLabel(mesMen)})`
+        : `Mensalidade ${nomejogador} (${mesLabel(mesMen)})`,
       valor: valorMen,
       tipo: 'receita',
-      categoria: 'Mensalidade',
+      categoria: isDiarista ? 'Diária' : 'Mensalidade',
       data: hoje,
       mensalidade_id: id,
     })
@@ -228,7 +241,7 @@ export default function Mensalidades() {
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4 }}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
                           Cobrar
                         </button>
-                        <button className="btn btn-sm btn-primary" onClick={() => marcarPago(m.id, m.valor, m.jogadores?.nome, m.mes)}>
+                        <button className="btn btn-sm btn-primary" onClick={() => marcarPago(m.id, m.valor, m.jogadores?.nome, m.mes, m.jogadores?.tipo)}>
                           ✓ Pago
                         </button>
                       </div>

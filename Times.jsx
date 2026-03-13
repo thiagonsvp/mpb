@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase.js'
 import html2canvas from 'html2canvas'
 
@@ -17,12 +17,16 @@ export default function Times() {
   const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  
+
   const [selectedIds, setSelectedIds] = useState(new Set())
-  const [numTimes, setNumTimes] = useState(2)
+  const [playersPerTeam, setPlayersPerTeam] = useState(5)
   const [modo, setModo] = useState('equilibrado')
   const [times, setTimes] = useState([])
   const [reserves, setReserves] = useState([])
+
+  // Guard: só persiste no localStorage depois do carregamento inicial,
+  // para não sobrescrever o valor salvo com o Set() vazio do estado inicial.
+  const playersLoaded = useRef(false)
 
   useEffect(() => { loadPlayers() }, [])
 
@@ -37,10 +41,18 @@ export default function Times() {
       setError('Erro ao carregar jogadores: ' + error.message)
     } else {
       setPlayers(data || [])
-      // Auto-select all players by default
-      setSelectedIds(new Set((data || []).map(p => p.id)))
+      // Restaurar seleção salva; se não houver, selecionar todos
+      const saved = localStorage.getItem('mpb-last-presences')
+      if (saved) {
+        const savedIds = JSON.parse(saved)
+        const validIds = new Set(savedIds.filter(id => (data || []).some(p => p.id === id)))
+        setSelectedIds(validIds)
+      } else {
+        setSelectedIds(new Set((data || []).map(p => p.id)))
+      }
     }
     setLoading(false)
+    playersLoaded.current = true
   }
 
   function togglePlayer(id) {
@@ -50,7 +62,9 @@ export default function Times() {
     setSelectedIds(newSet)
   }
 
+  // Salva no localStorage apenas após o carregamento inicial
   useEffect(() => {
+    if (!playersLoaded.current) return
     localStorage.setItem('mpb-last-presences', JSON.stringify(Array.from(selectedIds)))
   }, [selectedIds])
 
@@ -93,29 +107,44 @@ export default function Times() {
 
   function generateTeams() {
     const pool = shuffle(players.filter(p => selectedIds.has(p.id)))
-    const nt = numTimes
-    const perTeam = Math.floor(pool.length / nt)
-    const extra = pool.length % nt
+
+    // Ex: 27 jogadores, 5 por time => 5 times de 5 + 1 time de 2
+    const fullTeams = Math.floor(pool.length / playersPerTeam)
+    const remainder = pool.length % playersPerTeam
+    // Capacidade de cada time: os primeiros `fullTeams` têm `playersPerTeam`,
+    // o último tem `remainder` (se houver). Mínimo de 2 times.
+    const nt = Math.max(2, remainder > 0 ? fullTeams + 1 : fullTeams)
+    // Slot de cada time: [playersPerTeam, playersPerTeam, ..., remainder]
+    const teamCaps = Array.from({ length: nt }, (_, i) => {
+      if (i < fullTeams) return playersPerTeam
+      return remainder > 0 ? remainder : playersPerTeam
+    })
     const teams = Array.from({ length: nt }, () => ({ players: [], rating: 0 }))
 
     if (modo === 'equilibrado') {
+      // Distribui do mais habilidoso ao menos, priorizando o time com menor rating
+      // que ainda tem vaga respeitando a capacidade individual de cada time
       const sorted = [...pool].sort((a, b) => b.rating - a.rating)
       sorted.forEach(p => {
         let bi = 0, br = Infinity
         teams.forEach((t, i) => {
-          if (t.players.length < perTeam + (i < extra ? 1 : 0) && t.rating < br) {
+          if (t.players.length < teamCaps[i] && t.rating < br) {
             br = t.rating; bi = i
           }
         })
         teams[bi].players.push(p)
         teams[bi].rating += p.rating
       })
-      setReserves([])
     } else {
-      const main = pool.slice(0, pool.length - extra)
-      main.forEach((p, i) => { teams[i % nt].players.push(p); teams[i % nt].rating += p.rating })
-      setReserves(pool.slice(pool.length - extra))
+      // Aleatório: round-robin respeitando capacidades
+      let ti = 0
+      pool.forEach(p => {
+        while (teams[ti].players.length >= teamCaps[ti]) ti++
+        teams[ti].players.push(p)
+        teams[ti].rating += p.rating
+      })
     }
+    setReserves([])
     setTimes(teams)
 
     // salvar sorteio no banco
@@ -125,7 +154,7 @@ export default function Times() {
     }).then()
   }
 
-  const canSort = selectedIds.size >= numTimes * 2
+  const canSort = selectedIds.size >= playersPerTeam * 2
 
   return (
     <div className="fade-in">
@@ -175,10 +204,10 @@ export default function Times() {
       <div className="card">
         <div className="card-title">Configurar Sorteio</div>
         <div className="form-row" style={{ marginBottom: 12 }}>
-          <div className="form-group" style={{ flex: 1, minWidth: 100 }}>
-            <div className="form-label">Nº de times</div>
-            <select value={numTimes} onChange={e => setNumTimes(+e.target.value)}>
-              {[2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} times</option>)}
+          <div className="form-group" style={{ flex: 1, minWidth: 120 }}>
+            <div className="form-label">Jogadores por time</div>
+            <select value={playersPerTeam} onChange={e => setPlayersPerTeam(+e.target.value)}>
+              {[3, 4, 5, 6, 7, 8].map(n => <option key={n} value={n}>{n} jogadores</option>)}
             </select>
           </div>
           <div className="form-group" style={{ flex: 2, minWidth: 140 }}>
@@ -195,8 +224,8 @@ export default function Times() {
         </button>
 
         {!canSort && selectedIds.size > 0 && (
-          <div style={{ fontSize: 13, color: 'var(--amber)', background: 'var(--amber-light)', padding: '8px 12px', borderRadius: 7, marginTop: 12 }}>
-            Mínimo de {numTimes * 2} jogadores para {numTimes} times (faltam {numTimes * 2 - selectedIds.size}).
+          <div style={{ fontSize: 13, color: 'var(--amber)', background: 'var(--amber-light)', padding: '8px 12px', borderRadius: 8, marginTop: 12 }}>
+            Selecione pelo menos {playersPerTeam * 2} jogadores para sortear com {playersPerTeam} por time.
           </div>
         )}
 

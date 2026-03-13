@@ -117,39 +117,43 @@ export default function Jogadores() {
 
       <div className="card">
         <div className="card-title">{editingId ? 'Editar Jogador' : 'Adicionar Jogador'}</div>
-        <div className="form-row">
+
+        {/* Linha 1: Nome (cresce) + Tipo (fixo) */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           <input
             value={nome}
             onChange={e => setNome(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && savePlayer()}
             placeholder="Nome"
-            style={{ flex: 1.2, minWidth: 140 }}
+            style={{ flex: 2, minWidth: 0 }}
           />
+          <select value={tipo} onChange={e => setTipo(e.target.value)} style={{ flex: 1, minWidth: 0, maxWidth: 130 }}>
+            <option value="mensalista">Mensalista</option>
+            <option value="diarista">Diarista</option>
+          </select>
+        </div>
+
+        {/* Linha 2: Telefone (cresce) + Posição (fixo) + Botão */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <input
             value={telefone}
             onChange={e => handleTelefone(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && savePlayer()}
             placeholder="(00) 00000-0000"
-            style={{ width: 140 }}
+            style={{ flex: 1, minWidth: 130 }}
           />
-          <select value={tipo} onChange={e => setTipo(e.target.value)} style={{ width: 110 }}>
-            <option value="mensalista">Mensalista</option>
-            <option value="diarista">Diarista</option>
+          <Stars value={rating} onChange={setRating} />
+          <select value={posicao} onChange={e => setPosicao(e.target.value)} style={{ width: 100, flexShrink: 0 }}>
+            {POSITIONS.map(p => <option key={p} value={p}>{p || 'Posição'}</option>)}
           </select>
-          <div style={{ flexBasis: '100%', display: 'flex', gap: 10, alignItems: 'center', marginTop: 8 }}>
-            <Stars value={rating} onChange={setRating} />
-            <select value={posicao} onChange={e => setPosicao(e.target.value)} style={{ width: 100 }}>
-              {POSITIONS.map(p => <option key={p} value={p}>{p || 'Posição'}</option>)}
-            </select>
-            <button className="btn btn-primary" onClick={savePlayer} disabled={saving} style={{ marginLeft: 'auto' }}>
-              {saving ? '...' : editingId ? 'Salvar' : '+ Adicionar'}
+          <button className="btn btn-primary" onClick={savePlayer} disabled={saving} style={{ flexShrink: 0 }}>
+            {saving ? '...' : editingId ? 'Salvar' : '+ Adicionar'}
+          </button>
+          {editingId && (
+            <button className="btn btn-secondary" onClick={cancelEdit} disabled={saving} style={{ flexShrink: 0 }}>
+              Cancelar
             </button>
-            {editingId && (
-              <button className="btn btn-secondary" onClick={cancelEdit} disabled={saving}>
-                Cancelar
-              </button>
-            )}
-          </div>
+          )}
         </div>
 
         {editingId && historico.length > 0 && (
