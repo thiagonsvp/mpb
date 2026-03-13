@@ -144,33 +144,45 @@ export default function Times() {
         teams[bi].rating += p.rating
       })
     } else {
-      // Modo Prioridade: Distribui mensalistas primeiro (equilibrado entre times)
-      // e depois preenche com diaristas (também equilibrado)
+      // Modo Prioridade: Preenche os times em sequência com mensalistas
+      // Ex: 12 mensalistas, 5 por time => Time 1 e 2 cheios de mensalistas, Time 3 com 2 mensalistas
       const mensalistas = pool.filter(p => p.tipo === 'mensalista').sort((a, b) => b.rating - a.rating)
       const diaristas = pool.filter(p => p.tipo !== 'mensalista').sort((a, b) => b.rating - a.rating)
 
-      // 1. Distribui mensalistas
-      mensalistas.forEach(p => {
-        let bi = 0, br = Infinity
-        teams.forEach((t, i) => {
-          if (t.players.length < teamCaps[i] && t.rating < br) {
-            br = t.rating; bi = i
-          }
-        })
-        teams[bi].players.push(p)
-        teams[bi].rating += p.rating
+      // 1. Calcular quantos mensalistas cabem em cada time (preenchendo na ordem)
+      let mRemaining = mensalistas.length
+      const mCaps = teamCaps.map(cap => {
+        const take = Math.min(cap, mRemaining)
+        mRemaining -= take
+        return take
       })
 
-      // 2. Distribui diaristas
+      // 2. Distribuir mensalistas respeitando as mCaps e equilibrando o rating
+      mensalistas.forEach(p => {
+        let bi = -1, br = Infinity
+        teams.forEach((t, i) => {
+          if (t.players.length < mCaps[i] && t.rating < br) {
+            br = t.rating; bi = i
+          }
+        })
+        if (bi !== -1) {
+          teams[bi].players.push(p)
+          teams[bi].rating += p.rating
+        }
+      })
+
+      // 3. Distribuir diaristas nas vagas que sobraram, também equilibrando
       diaristas.forEach(p => {
-        let bi = 0, br = Infinity
+        let bi = -1, br = Infinity
         teams.forEach((t, i) => {
           if (t.players.length < teamCaps[i] && t.rating < br) {
             br = t.rating; bi = i
           }
         })
-        teams[bi].players.push(p)
-        teams[bi].rating += p.rating
+        if (bi !== -1) {
+          teams[bi].players.push(p)
+          teams[bi].rating += p.rating
+        }
       })
     }
     setReserves([])
