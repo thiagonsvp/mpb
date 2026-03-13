@@ -1,24 +1,8 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase.js'
+import { supabase } from './supabase.js'
+import html2canvas from 'html2canvas'
 
-const POSITIONS = ['', 'GOL', 'ZAG', 'LAT', 'MEI', 'ATA']
 const TEAM_COLORS = ['#1a6b3a', '#185fa5', '#853f0b', '#722b4e', '#0f5e54', '#4a1b0c']
-
-function Stars({ value, onChange }) {
-  return (
-    <div className="stars">
-      {[1, 2, 3, 4, 5].map(v => (
-        <button
-          key={v}
-          className={`star ${v <= value ? 'on' : 'off'}`}
-          onClick={() => onChange(v)}
-          type="button"
-          title={`${v} estrela${v > 1 ? 's' : ''}`}
-        >★</button>
-      ))}
-    </div>
-  )
-}
 
 function shuffle(arr) {
   const a = [...arr]
@@ -33,10 +17,8 @@ export default function Times() {
   const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [nome, setNome] = useState('')
-  const [rating, setRating] = useState(0)
-  const [posicao, setPosicao] = useState('')
-  const [saving, setSaving] = useState(false)
+  
+  const [selectedIds, setSelectedIds] = useState(new Set())
   const [numTimes, setNumTimes] = useState(2)
   const [modo, setModo] = useState('equilibrado')
   const [times, setTimes] = useState([])
@@ -51,31 +33,66 @@ export default function Times() {
       .select('*')
       .eq('ativo', true)
       .order('nome')
-    if (error) setError('Erro ao carregar jogadores: ' + error.message)
-    else setPlayers(data || [])
+    if (error) {
+      setError('Erro ao carregar jogadores: ' + error.message)
+    } else {
+      setPlayers(data || [])
+      // Auto-select all players by default
+      setSelectedIds(new Set((data || []).map(p => p.id)))
+    }
     setLoading(false)
   }
 
-  async function addPlayer() {
-    if (!nome.trim()) { setError('Digite o nome do jogador.'); return }
-    if (!rating) { setError('Selecione o nível (1–5 estrelas).'); return }
-    setError(''); setSaving(true)
-    const { error } = await supabase
-      .from('jogadores')
-      .insert({ nome: nome.trim(), rating, posicao: posicao || null })
-    setSaving(false)
-    if (error) { setError('Erro ao salvar: ' + error.message); return }
-    setNome(''); setRating(0); setPosicao('')
-    loadPlayers()
+  function togglePlayer(id) {
+    const newSet = new Set(selectedIds)
+    if (newSet.has(id)) newSet.delete(id)
+    else newSet.add(id)
+    setSelectedIds(newSet)
   }
 
-  async function removePlayer(id) {
-    await supabase.from('jogadores').update({ ativo: false }).eq('id', id)
-    setPlayers(p => p.filter(x => x.id !== id))
+  useEffect(() => {
+    localStorage.setItem('mpb-last-presences', JSON.stringify(Array.from(selectedIds)))
+  }, [selectedIds])
+
+  function shareImage() {
+    const el = document.getElementById('sorteio-resultado')
+    const header = document.getElementById('share-header')
+    if (!el) return
+    if (header) header.style.display = 'flex'
+    
+    const theme = document.body.getAttribute('data-theme') === 'dark' ? '#1f2937' : '#ffffff'
+    
+    html2canvas(el, { backgroundColor: theme }).then(canvas => {
+      if (header) header.style.display = 'none'
+      canvas.toBlob(blob => {
+        if (!blob) return
+        const file = new File([blob], 'sorteio.png', { type: 'image/png' })
+        if (navigator.share && navigator.canShare({ files: [file] })) {
+          navigator.share({ title: 'Sorteio de Times', files: [file] }).catch(err => console.error("Erro ao compartilhar", err))
+        } else {
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = 'sorteio.png'
+          a.click()
+        }
+      })
+    }).catch(err => {
+      console.error(err)
+      if (header) header.style.display = 'none'
+    })
+  }
+
+  function selectAll() {
+    setSelectedIds(new Set(players.map(p => p.id)))
+  }
+
+  function selectNone() {
+    setSelectedIds(new Set())
   }
 
   function generateTeams() {
-    const pool = shuffle(players)
+    const pool = shuffle(players.filter(p => selectedIds.has(p.id)))
     const nt = numTimes
     const perTeam = Math.floor(pool.length / nt)
     const extra = pool.length % nt
@@ -108,89 +125,97 @@ export default function Times() {
     }).then()
   }
 
-  const canSort = players.length >= numTimes * 2
+  const canSort = selectedIds.size >= numTimes * 2
 
   return (
-    <div>
-      <div className="page-title">Times</div>
-      <div className="page-sub">Gerencie os jogadores e sorteie times equilibrados</div>
+    <div className="fade-in">
+      <div className="page-title">Sorteio de Times</div>
+      <div className="page-sub">Selecione quem veio hoje e sorteie os times</div>
 
       {error && <div className="error-banner">{error} <button onClick={() => setError('')} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}>✕</button></div>}
 
       <div className="card">
-        <div className="card-title">Adicionar Jogador</div>
-        <div className="form-row">
-          <input
-            value={nome}
-            onChange={e => setNome(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addPlayer()}
-            placeholder="Nome do jogador"
-            style={{ flex: 2, minWidth: 140 }}
-          />
-          <Stars value={rating} onChange={setRating} />
-          <select value={posicao} onChange={e => setPosicao(e.target.value)} style={{ width: 100 }}>
-            {POSITIONS.map(p => <option key={p} value={p}>{p || 'Posição'}</option>)}
-          </select>
-          <button className="btn btn-primary" onClick={addPlayer} disabled={saving}>
-            {saving ? '...' : '+ Add'}
-          </button>
+        <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Lista de Presença ({selectedIds.size}/{players.length})</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+             <button className="btn btn-sm btn-secondary" onClick={selectAll}>Todos</button>
+             <button className="btn btn-sm btn-secondary" onClick={selectNone}>Nenhum</button>
+          </div>
         </div>
-      </div>
-
-      <div className="card">
-        <div className="card-title">Jogadores ({players.length})</div>
         {loading
           ? <div className="loading">Carregando...</div>
           : players.length === 0
-            ? <div className="empty">Nenhum jogador cadastrado</div>
-            : <div className="list">
-              {players.map(p => (
-                <div className="list-item" key={p.id}>
-                  <span style={{ flex: 1, fontWeight: 500 }}>{p.nome}</span>
-                  {p.posicao && <span className="badge receita">{p.posicao}</span>}
-                  <span style={{ color: '#f5a623', fontSize: 13, letterSpacing: -1 }}>
-                    {'★'.repeat(p.rating)}{'☆'.repeat(5 - p.rating)}
-                  </span>
-                  <button className="btn btn-sm btn-danger" onClick={() => removePlayer(p.id)}>Remover</button>
-                </div>
-              ))}
+            ? <div className="empty">Nenhum jogador cadastrado. Vá até a aba Elenco.</div>
+            : <div className="grid-list">
+              {players.map(p => {
+                const isSelected = selectedIds.has(p.id)
+                return (
+                  <div 
+                    key={p.id} 
+                    className={`selectable-item ${isSelected ? 'selected' : ''}`}
+                    onClick={() => togglePlayer(p.id)}
+                  >
+                    <div className="checkbox">
+                      {isSelected && <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M5 13l4 4L19 7"/></svg>}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nome}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text2)', lineHeight: 1.3, marginTop: 2 }}>
+                         {p.posicao && <span style={{ fontWeight: 600, color: 'var(--amber)', display: 'block' }}>{p.posicao}</span>}
+                         <span style={{ color: '#f5a623', letterSpacing: '-1px', fontSize: 10 }}>{'★'.repeat(p.rating)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
         }
       </div>
 
       <div className="card">
-        <div className="card-title">Sorteio</div>
+        <div className="card-title">Configurar Sorteio</div>
         <div className="form-row" style={{ marginBottom: 12 }}>
-          <div className="form-group">
+          <div className="form-group" style={{ flex: 1, minWidth: 100 }}>
             <div className="form-label">Nº de times</div>
-            <select value={numTimes} onChange={e => setNumTimes(+e.target.value)} style={{ width: 120 }}>
+            <select value={numTimes} onChange={e => setNumTimes(+e.target.value)}>
               {[2, 3, 4, 5, 6].map(n => <option key={n} value={n}>{n} times</option>)}
             </select>
           </div>
-          <div className="form-group">
+          <div className="form-group" style={{ flex: 2, minWidth: 140 }}>
             <div className="form-label">Modo</div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className={`btn ${modo === 'equilibrado' ? 'btn-primary' : 'btn-secondary'}`} style={{ height: 38 }} onClick={() => setModo('equilibrado')}>Equilibrado</button>
-              <button className={`btn ${modo === 'aleatorio' ? 'btn-primary' : 'btn-secondary'}`} style={{ height: 38 }} onClick={() => setModo('aleatorio')}>Aleatório</button>
+              <button className={`btn ${modo === 'equilibrado' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: 0 }} onClick={() => setModo('equilibrado')}>Equilibrado</button>
+              <button className={`btn ${modo === 'aleatorio' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: 0 }} onClick={() => setModo('aleatorio')}>Aleatório</button>
             </div>
           </div>
-          <div className="form-group" style={{ justifyContent: 'flex-end' }}>
-            <div className="form-label">&nbsp;</div>
-            <button className="btn btn-primary" onClick={generateTeams} disabled={!canSort} style={{ height: 38 }}>
-              🎲 Sortear
-            </button>
-          </div>
         </div>
-        {!canSort && players.length > 0 && (
-          <div style={{ fontSize: 13, color: 'var(--amber)', background: 'var(--amber-light)', padding: '8px 12px', borderRadius: 7 }}>
-            Mínimo de {numTimes * 2} jogadores para {numTimes} times (faltam {numTimes * 2 - players.length}).
+        
+        <button className="btn btn-primary" onClick={generateTeams} disabled={!canSort} style={{ width: '100%', height: 46, fontSize: 16 }}>
+          🎲 Sortear Times
+        </button>
+
+        {!canSort && selectedIds.size > 0 && (
+          <div style={{ fontSize: 13, color: 'var(--amber)', background: 'var(--amber-light)', padding: '8px 12px', borderRadius: 7, marginTop: 12 }}>
+            Mínimo de {numTimes * 2} jogadores para {numTimes} times (faltam {numTimes * 2 - selectedIds.size}).
           </div>
         )}
 
         {times.length > 0 && (
-          <div>
-            <div style={{ height: 1, background: 'var(--border)', margin: '16px 0' }} />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+          <div className="fade-in">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>Resultado</h3>
+              <button className="btn btn-sm btn-secondary" onClick={shareImage} style={{ background: 'var(--green)', color: '#fff', borderColor: 'var(--green)' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4 }}><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                Compartilhar
+              </button>
+            </div>
+            
+            <div id="sorteio-resultado" style={{ padding: '16px 10px', background: 'var(--card)', borderRadius: 10 }}>
+              <div id="share-header" style={{ display: 'none', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 20 }}>
+                <img src="/logo.png" alt="Motivos para Beber" style={{ width: 36, height: 36, objectFit: 'contain' }} />
+                <span style={{ fontSize: 20, fontWeight: 'bold' }}>Motivos para Beber 🍻</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
               {times.map((t, i) => {
                 const avg = t.players.length ? (t.rating / t.players.length).toFixed(1) : 0
                 return (
@@ -203,7 +228,7 @@ export default function Times() {
                       {t.players.map(p => (
                         <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
                           <span style={{ fontWeight: 500 }}>{p.nome}</span>
-                          <span style={{ color: '#f5a623' }}>{'★'.repeat(p.rating)}</span>
+                          <span style={{ color: 'var(--amber)', fontWeight: 600 }}>{p.posicao || '-'}</span>
                         </div>
                       ))}
                     </div>
@@ -212,10 +237,12 @@ export default function Times() {
               })}
             </div>
             {reserves.length > 0 && (
-              <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--bg)', borderRadius: 8, fontSize: 13, color: 'var(--text2)' }}>
-                <strong>Reservas:</strong> {reserves.map(p => p.nome).join(', ')}
+              <div style={{ marginTop: 10, padding: '12px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text2)' }}>
+                <strong>Reservas (Ficaram de fora):</strong> <br/>
+                {reserves.map(p => p.nome).join(', ')}
               </div>
             )}
+            </div>
           </div>
         )}
       </div>

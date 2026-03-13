@@ -119,6 +119,7 @@
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
 }
 
@@ -214,7 +215,95 @@
 
 @media (max-width: 600px) {
   .metrics { grid-template-columns: 1fr 1fr; }
-  .app-logo { display: none; }
-  .form-row { flex-direction: column; }
-  .form-row input, .form-row select, .form-row .btn { width: 100%; }
+  .form-row { flex-direction: column; align-items: stretch; }
+  .form-row input, .form-row select, .form-row .btn { width: 100% !important; }
+}
+
+/* app layout tweaks */
+.fade-in { animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+.mobile-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  z-index: 1000;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.mobile-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  padding: 10px 0;
+  color: var(--text3);
+  font-size: 11px;
+  font-weight: 600;
+  transition: all .2s;
+}
+
+.mobile-tab.active {
+  color: var(--green);
+}
+
+.mobile-tab svg { width: 22px; height: 22px; margin-bottom: 2px; }
+
+@media (max-width: 600px) {
+  .desktop-tabs { display: none !important; }
+  .mobile-nav { display: flex; }
+  .app-header { border-bottom: none; box-shadow: none; display: flex; align-items: center; justify-content: center; padding-top: 10px; height: 50px; position: relative; }
+  .app-header-inner { justify-content: center; width: 100%; position: relative; }
+  .app-logo { display: flex !important; align-items: center; justify-content: center; font-size: 17px !important; gap: 6px; }
+  .theme-toggle { position: absolute; right: 0; background: none; border: none; font-size: 18px; }
+  .app-main { padding-bottom: 80px !important; } /* space for bottom nav */
+}
+
+/* additions for new times layout */
+.grid-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.selectable-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all .1s;
+  user-select: none;
+  background: var(--card);
+}
+
+.selectable-item:hover { background: var(--bg); }
+.selectable-item.selected { border-color: var(--green); background: var(--green-light); }
+
+.checkbox {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--text3);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all .15s;
+}
+
+.selectable-item.selected .checkbox {
+  background: var(--green);
+  border-color: var(--green);
 }

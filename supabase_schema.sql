@@ -7,8 +7,10 @@
 create table if not exists jogadores (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
-  rating int not null check (rating between 1 and 5),
+  rating int not null check (rating between 1 and 10),
   posicao text,
+  telefone text,
+  tipo text default 'mensalista' check (tipo in ('mensalista','diarista')),
   ativo boolean default true,
   created_at timestamptz default now()
 );
@@ -43,6 +45,17 @@ create table if not exists transacoes (
   categoria text,
   data date default current_date,
   mensalidade_id uuid references mensalidades(id) on delete set null,
+  created_at timestamptz default now()
+);
+
+-- Resenhas Pós-Jogo
+create table if not exists resenhas (
+  id uuid primary key default gen_random_uuid(),
+  comprador text not null,
+  valor numeric(10,2) not null,
+  pix text,
+  data date default current_date,
+  participantes jsonb not null,
   created_at timestamptz default now()
 );
 

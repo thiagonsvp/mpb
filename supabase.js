@@ -7,4 +7,4 @@ if (!url || !key) {
   console.error('⚠️  Variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY não configuradas.')
 }
 
-export const supabase = createClient(url, key)
+export const supabase = createClient(url || 'https://dummy.supabase.co', key || 'dummy')

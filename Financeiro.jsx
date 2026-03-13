@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase.js'
+import { supabase } from './supabase.js'
 
 const CATEGORIAS_RECEITA = ['Mensalidade', 'Patrocínio', 'Evento', 'Outros']
 const CATEGORIAS_DESPESA = ['Aluguel campo', 'Equipamento', 'Arbitragem', 'Uniforme', 'Lanche', 'Outros']
+const MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
 function fmtDate(d) {
   if (!d) return ''
@@ -21,6 +22,7 @@ export default function Financeiro() {
   const [data, setData] = useState(new Date().toISOString().split('T')[0])
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState('todos')
+  const [reportYear, setReportYear] = useState(new Date().getFullYear().toString())
 
   useEffect(() => { loadTransacoes() }, [])
 
@@ -59,6 +61,7 @@ export default function Financeiro() {
   }
 
   async function deleteTransacao(id) {
+    if (!window.confirm('Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita.')) return;
     await supabase.from('transacoes').delete().eq('id', id)
     setTransacoes(t => t.filter(x => x.id !== id))
   }
@@ -69,6 +72,23 @@ export default function Financeiro() {
   const saldo = receitas - despesas
 
   const cats = tipo === 'receita' ? CATEGORIAS_RECEITA : CATEGORIAS_DESPESA
+
+  const anosDisponiveis = [...new Set(transacoes.map(t => (t.data || '').slice(0, 4)).filter(Boolean))].sort((a,b) => b.localeCompare(a))
+  if (anosDisponiveis.indexOf(new Date().getFullYear().toString()) === -1) {
+    anosDisponiveis.unshift(new Date().getFullYear().toString())
+  }
+  const uniqueAnos = [...new Set(anosDisponiveis)]
+
+  let acumuladoAno = 0;
+  const relatorio = Array.from({ length: 12 }, (_, i) => {
+    const mesStr = `${reportYear}-${String(i + 1).padStart(2, '0')}`;
+    const trxMes = transacoes.filter(t => t.data?.startsWith(mesStr));
+    const rec = trxMes.filter(t => t.tipo === 'receita').reduce((s, t) => s + Number(t.valor), 0);
+    const des = trxMes.filter(t => t.tipo === 'despesa').reduce((s, t) => s + Number(t.valor), 0);
+    const result = rec - des;
+    acumuladoAno += result;
+    return { mesNome: MESES_NOME[i], rec, des, result, acumulado: acumuladoAno };
+  })
 
   return (
     <div>
@@ -180,6 +200,44 @@ export default function Financeiro() {
               ))}
             </div>
         }
+      </div>
+
+      <div className="card">
+        <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Relatório Analítico Anual</span>
+          <select value={reportYear} onChange={e => setReportYear(e.target.value)} style={{ padding: '4px 8px', fontSize: 14 }}>
+            {uniqueAnos.map(ano => <option key={ano} value={ano}>{ano}</option>)}
+          </select>
+        </div>
+        
+        <div style={{ overflowX: 'auto', marginTop: 16 }}>
+          <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', fontSize: 14 }}>
+            <thead>
+              <tr style={{ background: 'var(--bg)', borderBottom: '2px solid var(--border)', textAlign: 'right' }}>
+                <th style={{ padding: '10px 12px', textAlign: 'left' }}>Mês</th>
+                <th style={{ padding: '10px 12px', color: 'var(--green)' }}>Receitas</th>
+                <th style={{ padding: '10px 12px', color: 'var(--red)' }}>Despesas</th>
+                <th style={{ padding: '10px 12px' }}>Resultado</th>
+                <th style={{ padding: '10px 12px' }}>Acumulado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {relatorio.map(r => (
+                <tr key={r.mesNome} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 500 }}>{r.mesNome}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>R$ {r.rec.toFixed(2)}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>R$ {r.des.toFixed(2)}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: r.result >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 500 }}>
+                    R$ {r.result.toFixed(2)}
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', color: r.acumulado >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+                    R$ {r.acumulado.toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
