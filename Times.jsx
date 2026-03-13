@@ -2,7 +2,15 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from './supabase.js'
 import html2canvas from 'html2canvas'
 
-const TEAM_COLORS = ['#1a6b3a', '#185fa5', '#853f0b', '#722b4e', '#0f5e54', '#4a1b0c']
+// Time 1=Preto, 2=Vermelho, 3=Branco, 4=Azul, 5=Amarelo, 6=Laranja
+const TEAM_COLORS = [
+  { bg: '#1a1a1a',  text: '#ffffff' }, // Preto
+  { bg: '#c0392b',  text: '#ffffff' }, // Vermelho
+  { bg: '#f0f0f0',  text: '#1a1a1a', border: '#c0c0c0' }, // Branco
+  { bg: '#1565c0',  text: '#ffffff' }, // Azul
+  { bg: '#f59e0b',  text: '#1a1a1a' }, // Amarelo
+  { bg: '#ea580c',  text: '#ffffff' }, // Laranja
+]
 
 function shuffle(arr) {
   const a = [...arr]
@@ -248,10 +256,10 @@ export default function Times() {
               {times.map((t, i) => {
                 const avg = t.players.length ? (t.rating / t.players.length).toFixed(1) : 0
                 return (
-                  <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-                    <div style={{ background: TEAM_COLORS[i % TEAM_COLORS.length], padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: '#fff', fontWeight: 600, fontSize: 14 }}>Time {i + 1}</span>
-                      <span style={{ color: 'rgba(255,255,255,.8)', fontSize: 12 }}>★ {avg}</span>
+                  <div key={i} style={{ border: `1.5px solid ${TEAM_COLORS[i % TEAM_COLORS.length].border || TEAM_COLORS[i % TEAM_COLORS.length].bg}`, borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ background: TEAM_COLORS[i % TEAM_COLORS.length].bg, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: TEAM_COLORS[i % TEAM_COLORS.length].text, fontWeight: 700, fontSize: 14 }}>Time {i + 1}</span>
+                      <span style={{ color: TEAM_COLORS[i % TEAM_COLORS.length].text, opacity: .75, fontSize: 12 }}>★ {avg}</span>
                     </div>
                     <div style={{ padding: '8px 12px' }}>
                       {t.players.map(p => (
