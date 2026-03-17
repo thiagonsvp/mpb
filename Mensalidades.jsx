@@ -11,6 +11,12 @@ function mesLabel(mes) {
   return MESES.find(m => m[0] === mes)?.[1] || mes
 }
 
+function fmtDate(d) {
+  if (!d) return ''
+  const [y, m, dd] = d.split('-')
+  return `${dd}/${m}/${y}`
+}
+
 // getStatus: mensalista vence dia 07 do mês, diarista vence no dia gerado (hoje)
 function getStatus(mes, tipo) {
   const hoje = new Date()
@@ -35,6 +41,8 @@ export default function Mensalidades() {
   const [mes, setMes] = useState('2026-03')
   const [filter, setFilter] = useState('todos')
   const [generating, setGenerating] = useState(false)
+  const [payDateFor, setPayDateFor] = useState(null)
+  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0])
 
   useEffect(() => { loadMensalidades() }, [])
 
@@ -62,7 +70,6 @@ export default function Mensalidades() {
 
     if (!jogadores?.length) { setError('Nenhum jogador ativo.'); setGenerating(false); return }
 
-
     const presencesStr = localStorage.getItem('mpb-last-presences')
     const presences = presencesStr ? JSON.parse(presencesStr) : []
 
@@ -79,7 +86,6 @@ export default function Mensalidades() {
       status: getStatus(mes, j.tipo),
     }))
 
-    // upsert — ignora duplicatas (unique constraint jogador_id+mes)
     const { error } = await supabase
       .from('mensalidades')
       .upsert(inserts, { onConflict: 'jogador_id,mes', ignoreDuplicates: true })
@@ -89,18 +95,17 @@ export default function Mensalidades() {
     loadMensalidades()
   }
 
-  async function marcarPago(id, valorMen, nomejogador, mesMen, tipoJogador) {
-    const hoje = new Date().toISOString().split('T')[0]
+  async function marcarPago(id, valorMen, nomejogador, mesMen, tipoJogador, dataEscolhida) {
+    const dataPgto = dataEscolhida || new Date().toISOString().split('T')[0]
     const { error } = await supabase
       .from('mensalidades')
-      .update({ status: 'pago', data_pagamento: hoje })
+      .update({ status: 'pago', data_pagamento: dataPgto })
       .eq('id', id)
 
     if (error) { setError('Erro: ' + error.message); return }
 
     const isDiarista = tipoJogador === 'diarista'
 
-    // lança receita automaticamente com categoria correta
     await supabase.from('transacoes').insert({
       descricao: isDiarista
         ? `Diária ${nomejogador} (${mesLabel(mesMen)})`
@@ -108,10 +113,11 @@ export default function Mensalidades() {
       valor: valorMen,
       tipo: 'receita',
       categoria: isDiarista ? 'Diária' : 'Mensalidade',
-      data: hoje,
+      data: dataPgto,
       mensalidade_id: id,
     })
 
+    setPayDateFor(null)
     loadMensalidades()
   }
 
@@ -127,10 +133,6 @@ export default function Mensalidades() {
       return
     }
     const num = m.jogadores.telefone.replace(/\D/g, '')
-    if (num.length < 10) {
-      alert('Número de telefone inválido.')
-      return
-    }
     const numeroFinal = num.startsWith('55') ? num : '55' + num
     const msg = `Fala ${m.jogadores.nome}, tudo certo? Só passando pra lembrar do valor de R$ ${Number(m.valor).toFixed(2).replace('.', ',')} referente a pelada (${mesLabel(m.mes)}). Faz o pix aí quando puder, a chave é: (21)98193-0313. Tmj! 🍻`
     window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(msg)}`, '_blank')
@@ -175,8 +177,6 @@ export default function Mensalidades() {
               value={valorMensalista}
               onChange={e => setValorMensalista(e.target.value)}
               placeholder="70"
-              min="0"
-              step="0.01"
               style={{ width: 110 }}
             />
           </div>
@@ -187,8 +187,6 @@ export default function Mensalidades() {
               value={valorDiarista}
               onChange={e => setValorDiarista(e.target.value)}
               placeholder="20"
-              min="0"
-              step="0.01"
               style={{ width: 110 }}
             />
           </div>
@@ -236,16 +234,38 @@ export default function Mensalidades() {
                   </div>
                   <span className={`badge ${m.status}`}>{m.status.charAt(0).toUpperCase() + m.status.slice(1)}</span>
                   {m.status !== 'pago'
-                    ? <div style={{ display: 'flex', gap: 6 }}>
-                        <button className="btn btn-sm btn-secondary" onClick={() => cobrarWhatsApp(m)} style={{ background: '#25D366', color: '#fff', borderColor: '#25D366' }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4 }}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-                          Cobrar
-                        </button>
-                        <button className="btn btn-sm btn-primary" onClick={() => marcarPago(m.id, m.valor, m.jogadores?.nome, m.mes, m.jogadores?.tipo)}>
-                          ✓ Pago
-                        </button>
+                    ? <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {payDateFor === m.id ? (
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center', background: 'var(--teal-light)', padding: '2px 6px', borderRadius: 8 }}>
+                            <input 
+                              type="date" 
+                              value={payDate} 
+                              onChange={e => setPayDate(e.target.value)} 
+                              style={{ width: 120, height: 30, fontSize: 12, padding: '0 6px' }} 
+                            />
+                            <button className="btn btn-sm btn-primary" onClick={() => marcarPago(m.id, m.valor, m.jogadores?.nome, m.mes, m.jogadores?.tipo, payDate)}>
+                              OK
+                            </button>
+                            <button className="btn btn-sm btn-secondary" onClick={() => setPayDateFor(null)} style={{ padding: '0 6px' }}>
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button className="btn btn-sm btn-secondary" onClick={() => cobrarWhatsApp(m)} style={{ background: '#25D366', color: '#fff', borderColor: '#25D366' }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 4 }}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                              Cobrar
+                            </button>
+                            <button className="btn btn-sm btn-primary" onClick={() => {
+                              setPayDateFor(m.id)
+                              setPayDate(new Date().toISOString().split('T')[0])
+                            }}>
+                              ✓ Pago
+                            </button>
+                          </>
+                        )}
                       </div>
-                    : <span style={{ fontSize: 12, color: 'var(--text2)' }}>{m.data_pagamento || ''}</span>
+                    : <span style={{ fontSize: 12, color: 'var(--text2)' }}>{fmtDate(m.data_pagamento) || ''}</span>
                   }
                   <button className="btn btn-sm btn-danger" onClick={() => deletarMensalidade(m.id)}>✕</button>
                 </div>

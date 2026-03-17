@@ -44,9 +44,26 @@ create table if not exists transacoes (
   tipo text not null check (tipo in ('receita','despesa')),
   categoria text,
   data date default current_date,
-  mensalidade_id uuid references mensalidades(id) on delete set null,
+  mensalidade_id uuid references mensalidades(id) on delete cascade,
   created_at timestamptz default now()
 );
+
+-- Gatilho para excluir mensalidade ao excluir transação (sincronização total)
+CREATE OR REPLACE FUNCTION public.handle_delete_transacao()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF OLD.mensalidade_id IS NOT NULL THEN
+    DELETE FROM public.mensalidades WHERE id = OLD.mensalidade_id;
+  END IF;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS tr_delete_transacao ON public.transacoes;
+CREATE TRIGGER tr_delete_transacao
+AFTER DELETE ON public.transacoes
+FOR EACH ROW
+EXECUTE FUNCTION public.handle_delete_transacao();
 
 -- Resenhas Pós-Jogo
 create table if not exists resenhas (
